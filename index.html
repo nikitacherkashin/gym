@@ -20,9 +20,16 @@ h1{font-size:30px;line-height:1.1;margin:0;letter-spacing:-.8px;font-weight:800}
 .dt{margin:4px 0 0!important}
 .dt::first-letter{text-transform:uppercase}
 .gear{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--card);display:grid;place-items:center}
-nav{display:flex;background:var(--card);padding:4px;border-radius:16px;margin-bottom:18px;border:1px solid var(--line)}
-nav button{flex:1;border:0;background:none;color:var(--hint);font-weight:600;font-size:15px;padding:10px 4px;border-radius:12px}
-nav button.on{background:var(--ac);color:var(--acx);box-shadow:0 6px 14px -6px var(--ac)}
+nav{position:relative;display:flex;background:var(--card);padding:4px;border-radius:20px;margin-bottom:18px;border:1px solid var(--line)}
+nav button{position:relative;z-index:1;flex:1;border:0;background:none;color:var(--hint);font-weight:600;font-size:15px;padding:10px 4px;border-radius:16px;transition:color .25s}
+nav button.on{color:var(--ac)}
+.pill{position:absolute;top:4px;bottom:4px;left:0;border-radius:16px;background:var(--ac2);box-shadow:inset 0 0 0 1px rgba(91,91,240,.35);pointer-events:none}
+.pill.go{transition:transform .42s cubic-bezier(.34,1.35,.5,1),width .42s cubic-bezier(.34,1.35,.5,1)}
+.pg.inR{animation:inR .3s ease-out}
+.pg.inL{animation:inL .3s ease-out}
+@keyframes inR{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
+@keyframes inL{from{opacity:0;transform:translateX(-26px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.pill.go{transition:none}.pg.inR,.pg.inL{animation:none}}
 .b{border:0;border-radius:14px;background:var(--ac);color:var(--acx);font-weight:700;padding:14px 16px;box-shadow:0 10px 20px -10px var(--ac)}
 .b.full{width:100%;margin-bottom:14px}
 .b.ghost{background:var(--bg);color:var(--tx);box-shadow:none;border:1px solid var(--line)}
@@ -87,6 +94,14 @@ select.q{margin-top:0}
 .box .row{display:flex;gap:10px}
 .box .b{flex:1;margin:0}
 #toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:var(--ac);color:var(--acx);padding:10px 18px;border-radius:22px;font-weight:700;z-index:9;display:none;box-shadow:0 10px 24px -8px var(--ac)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center;margin-top:12px}
+.cw{font-size:12px;color:var(--hint);padding-bottom:2px;text-transform:capitalize}
+.cd{aspect-ratio:1;min-width:0;border:1.5px solid transparent;border-radius:12px;background:var(--bg);font-size:15px;padding:0}
+.cd.has{background:var(--ac2);color:var(--ac);font-weight:800}
+.cd.today{border-color:var(--ac)}
+.cd.sel{background:var(--ac);color:var(--acx)}
+.row2{display:flex;gap:8px;margin-top:10px;align-items:center}
+.pr.wu{background:var(--bg);color:var(--hint);box-shadow:inset 0 0 0 1px var(--line)}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
 .stats div{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:13px}
 .stats b{display:block;font-size:26px;letter-spacing:-.5px}
@@ -101,8 +116,8 @@ select.q{margin-top:0}
 <div id="app"></div>
 <div id="cat"></div>
 <div id="set"></div>
-<div id="rest"><span>Отдых</span><b id="rt"></b><button data-a="r15">+15 с</button><button data-a="rstop">Пропустить</button></div>
-<div id="dlg"><div class="box"><p id="dm"></p><div class="row"><button class="b ghost" data-a="dno">Отмена</button><button class="b danger" data-a="dyes">Да</button></div></div></div>
+<div id="rest"></div>
+<div id="dlg"></div>
 <div id="toast"></div>
 <script>
 const tg = window.Telegram && Telegram.WebApp;
@@ -163,23 +178,36 @@ const CAT = {
   }
 };
 
-let W = [], D = { e: [] }, tab = 't', cp = [], q = '', pe = '', rest = 0, cfg = { rest: 90, theme: 'auto', step: 2.5, auto: true, vib: true };
+let W = [], D = { e: [] }, tab = 't', cp = [], q = '', pe = '', rest = 0, cfg = { rest: 90, theme: 'auto', step: 2.5, auto: true, vib: true, goal: 3,
+  lang: (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.language_code === 'uk') ? 'uk' : 'ru' };
 
+let TPL = [];
+let LOC = 'ru', sel = '', anim = 0, pill = null, cm = new Date();
+cm.setDate(1);
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = n => String(+n);
 const e1 = (w, r) => r === 1 ? w : w * (1 + r / 30); // расчётный разовый максимум (формула Эпли)
 const setsText = s => s.map(a => fmt(a[0]) + '×' + a[1]).join(', ');
-const dstr = (id, o) => new Date(id).toLocaleDateString('ru', o || { day: 'numeric', month: 'short' });
+const dkey = id => { const d = new Date(id); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const dstr = (id, o) => new Date(id).toLocaleDateString(LOC, o || { day: 'numeric', month: 'short' });
 const sameN = (a, b) => a.toLowerCase() === b.toLowerCase();
 const lastTime = n => { for (const w of W) { const x = w.e.find(x => sameN(x.n, n)); if (x) return x.s; } return null; };
-const best = n => { let m = 0; W.forEach(w => w.e.forEach(x => { if (sameN(x.n, n)) x.s.forEach(s => m = Math.max(m, e1(s[0], s[1]))); })); return m; };
+const best = n => { let m = 0; W.forEach(w => w.e.forEach(x => { if (sameN(x.n, n)) x.s.forEach(s => { if (s[2] !== 2) m = Math.max(m, e1(s[0], s[1])); }); })); return m; };
 let dlgCb = null;
-const ask = (m, ok) => { $('#dm').textContent = m; dlgCb = ok; $('#dlg').classList.add('on'); };
-const warn = m => (tg && tg.showAlert) ? tg.showAlert(m) : alert(m);
+const ask = (m, ok, mode) => {
+  $('#dm').textContent = tr(m); dlgCb = ok;
+  $('#di').style.display = mode === 'in' ? 'block' : 'none'; $('#da').style.display = mode === 'ta' ? 'block' : 'none';
+  $('#di').value = ''; $('#da').value = '';
+  $('#dno').style.display = mode === 'info' ? 'none' : '';
+  $('#dyes').textContent = mode === 'info' ? 'OK' : tr(mode ? 'Готово' : 'Да');
+  $('#dyes').className = 'b' + (mode ? '' : ' danger');
+  $('#dlg').classList.add('on');
+};
+const warn = m => (tg && tg.showAlert) ? tg.showAlert(tr(m)) : alert(tr(m));
 const hap = t => { if (!cfg.vib) return; try { t ? tg.HapticFeedback.notificationOccurred('success') : tg.HapticFeedback.impactOccurred('light'); } catch (e) {} };
-const saveDraft = () => store.set('draft', JSON.stringify({ t0: D.t0, e: D.e.map(({ n, s }) => ({ n, s })) }));
-function toast(m) { const t = $('#toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 2000); }
+const saveDraft = () => store.set('draft', JSON.stringify({ t0: D.t0, dt: D.dt, e: D.e.map(({ n, s, c }) => ({ n, s, c })) }));
+function toast(m) { const t = $('#toast'); t.textContent = tr(m); t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 2000); }
 
 // Таймер отдыха
 function startRest(s) { rest = Date.now() + s * 1000; $('#rest').classList.add('on'); tick(); }
@@ -191,52 +219,262 @@ function tick() {
 }
 setInterval(tick, 500);
 
+// ==i18n-start
+const UA_UI = `Мой зал=Мій зал
+Тренировка=Тренування
+ТРЕНИРОВКА=ТРЕНУВАННЯ
+Прогресс=Прогрес
+История=Історія
+Настройки=Налаштування
+Что тренируем?=Що тренуємо?
+Поиск=Пошук
+Поиск или своё упражнение=Пошук або своя вправа
+Добавить своё=Додати свою
+Добавить упражнение=Додати вправу
+Тренировка ещё не началась.=Тренування ще не почалося.
+Выбери упражнение в каталоге: верх или низ, группа, мышца.=Обери вправу в каталозі: верх або низ, група, м’яз.
+Идёт=Йде
+мин=хв
+Прошлый раз=Минулого разу
+Вес, кг=Вага, кг
+Повторы=Повторення
+рекордов=рекордів
+подходов=підходів
+Записать подход=Записати підхід
+Завершить тренировку=Завершити тренування
+Графики появятся, когда ты завершишь первую тренировку.=Графіки з’являться, коли ти завершиш перше тренування.
+тренировок=тренувань
+за 7 дней=за 7 днів
+Расчётный максимум на 1 повтор, кг=Розрахунковий максимум на 1 повторення, кг
+Нужно минимум две тренировки с этим упражнением.=Потрібно щонайменше два тренування з цією вправою.
+Пока нет тренировок. Заверши первую, и она появится здесь.=Поки немає тренувань. Заверши перше, і воно з’явиться тут.
+В этот день тренировок не было.=Цього дня тренувань не було.
+Нажми на выбранную дату ещё раз, чтобы увидеть все тренировки.=Натисни на вибрану дату ще раз, щоб побачити всі тренування.
+Тренировок за месяц=Тренувань за місяць
+упр.=вправ
+ОФОРМЛЕНИЕ=ОФОРМЛЕННЯ
+Авто берёт тему из Telegram=Авто бере тему з Telegram
+Светлая=Світла
+Тёмная=Темна
+Отдых между подходами=Відпочинок між підходами
+Секунды=Секунди
+Шаг веса=Крок ваги
+Кнопки − и + меняют вес на это число, кг=Кнопки − та + змінюють вагу на це число, кг
+Запускать таймер сам=Запускати таймер сам
+После каждого записанного подхода=Після кожного записаного підходу
+Вибрация=Вібрація
+Отклик на нажатия и конец отдыха=Відгук на натискання та кінець відпочинку
+ДАННЫЕ=ДАНІ
+Резервная копия=Резервна копія
+Скопирует все тренировки в буфер обмена=Скопіює всі тренування в буфер обміну
+Скопировать=Скопіювати
+Очистить историю=Очистити історію
+Удалит все завершённые тренировки=Видалить усі завершені тренування
+Очистить=Очистити
+Данные хранятся в облаке Telegram и привязаны к твоему аккаунту.=Дані зберігаються в хмарі Telegram і прив’язані до твого акаунта.
+Отдых=Відпочинок
+Пропустить=Пропустити
+Отмена=Скасувати
+Да=Так
+Удалить упражнение вместе с подходами?=Видалити вправу разом з підходами?
+Удалить эту тренировку?=Видалити це тренування?
+Удалить все завершённые тренировки? Это нельзя отменить.=Видалити всі завершені тренування? Це неможливо скасувати.
+Отдых закончен=Відпочинок закінчено
+Новый рекорд!=Новий рекорд!
+Тренировка сохранена=Тренування збережено
+Скопировано=Скопійовано
+Удаляю…=Видаляю…
+История очищена=Історію очищено
+Введи вес и число повторов.=Введи вагу та кількість повторень.
+Тренировка слишком большая для сохранения. Сократи число упражнений или подходов.=Тренування завелике для збереження. Скороти кількість вправ або підходів.
+Не удалось скопировать.=Не вдалося скопіювати.
+Не удалось удалить тренировок=Не вдалося видалити тренувань
+Попробуй ещё раз.=Спробуй ще раз.
+Ошибка при удалении. Попробуй ещё раз.=Помилка під час видалення. Спробуй ще раз.
+Шаблоны=Шаблони
+Сохранить как шаблон=Зберегти як шаблон
+Название шаблона=Назва шаблону
+Шаблон сохранён=Шаблон збережено
+Удалить шаблон?=Видалити шаблон?
+Слишком много шаблонов. Удали ненужные.=Забагато шаблонів. Видали непотрібні.
+Текущая тренировка будет заменена. Продолжить?=Поточне тренування буде замінено. Продовжити?
+Повторить=Повторити
+Скопировать итог=Скопіювати підсумок
+Записать тренировку на эту дату=Записати тренування на цю дату
+Дата тренировки=Дата тренування
+Разминочный=Розминковий
+разминка=розминка
+Заметка=Нотатка
+Цель на неделю=Мета на тиждень
+Тренировок в неделю=Тренувань на тиждень
+Эта неделя=Цей тиждень
+Серия недель=Серія тижнів
+Рекорды=Рекорди
+Скопирует тренировки и шаблоны=Скопіює тренування та шаблони
+Восстановить из копии=Відновити з копії
+Вернёт тренировки из резервной копии=Поверне тренування з резервної копії
+Вставь скопированные данные=Встав скопійовані дані
+Вставить=Вставити
+Не удалось прочитать копию.=Не вдалося прочитати копію.
+Добавлено тренировок=Додано тренувань`;
+const UA_CAT = `Грудь=Груди
+Спина=Спина
+Плечи=Плечі
+Ягодицы=Сідниці
+Икры=Литки
+Верх груди=Верх грудей
+Середина груди=Середина грудей
+Низ груди=Низ грудей
+Широчайшие=Найширші
+Середина спины=Середина спини
+Трапеции=Трапеції
+Поясница=Поперек
+Передние дельты=Передні дельти
+Средние дельты=Середні дельти
+Задние дельты=Задні дельти
+Бицепс=Біцепс
+Трицепс=Тріцепс
+Предплечья=Передпліччя
+Пресс=Прес
+Косые мышцы=Косі м’язи
+Квадрицепс=Квадріцепс
+Бицепс бедра=Біцепс стегна
+Приводящие=Привідні
+Ягодичные=Сідничні
+Икроножные=Литкові
+Камбаловидные=Камбалоподібні`;
+const UA_EX = `Жим штанги на похилій лаві|Жим гантелей на похилій лаві|Розводка гантелей на похилій лаві|Жим у Сміті на похилій лаві
+Жим штанги лежачи|Жим гантелей лежачи|Розводка гантелей лежачи|Зведення рук у кросовері|Жим у тренажері сидячи
+Віджимання на брусах|Жим на лаві головою вниз|Зведення в кросовері зверху вниз
+Підтягування|Тяга верхнього блока|Тяга верхнього блока вузьким хватом|Пуловер у блоці
+Тяга штанги в нахилі|Тяга гантелі однією рукою|Тяга горизонтального блока|Тяга Т-грифа
+Шраги зі штангою|Шраги з гантелями|Тяга штанги до підборіддя
+Гіперекстензія|Станова тяга|Нахили зі штангою
+Жим штанги стоячи|Жим гантелей сидячи|Підйом гантелей перед собою
+Махи гантелей убік|Махи в кросовері|Жим Арнольда
+Розводка гантелей у нахилі|Зворотні розведення в тренажері|Тяга до обличчя
+Підйом штанги на біцепс|Підйом гантелей із супінацією|Молотки|Згинання на лаві Скотта|Згинання рук у кросовері
+Французький жим|Розгинання на верхньому блоці|Жим вузьким хватом|Розгинання гантелі з-за голови|Віджимання на брусах вузько
+Згинання кистей зі штангою|Розгинання кистей зі штангою|Прогулянка фермера
+Скручування|Підйом ніг у висі|Планка|Скручування на блоці
+Бокові скручування|Російські скручування|Нахили з гантелею вбік
+Присідання зі штангою|Жим ногами|Розгинання ніг у тренажері|Випади|Болгарські присідання|Гакк-присідання
+Румунська тяга|Згинання ніг лежачи|Згинання ніг сидячи|Тяга на прямих ногах
+Зведення ніг у тренажері|Присідання сумо
+Сідничний місток|Хіп-траст|Відведення ноги в кросовері|Випади назад
+Підйом на носки стоячи|Підйом на носки в жимі ногами
+Підйом на носки сидячи`;
+const DICT = {};
+(UA_UI + '\n' + UA_CAT).split('\n').forEach(l => {
+  const i = l.indexOf('='), a = l.slice(0, i), b = l.slice(i + 1);
+  if (i > 0 && a !== b) DICT[a] = b;
+});
+UA_CAT.split('\n').forEach(l => { const [a, b] = l.split('='); if (a.toLowerCase() !== b.toLowerCase()) DICT[a.toLowerCase()] = b.toLowerCase(); });
+let exi = 0; const exl = UA_EX.split('\n');
+Object.values(CAT).forEach(g => Object.values(g).forEach(m => Object.values(m).forEach(str => {
+  const u = (exl[exi++] || '').split('|');
+  str.split('|').forEach((n, k) => { if (u[k] && u[k] !== n) DICT[n] = u[k]; });
+})));
+const RE = new RegExp('(^|[^\\p{L}])(' + Object.keys(DICT).sort((a, b) => b.length - a.length)
+  .map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(?![\\p{L}])', 'gu');
+const tr = s => cfg.lang === 'uk' ? String(s).replace(RE, (m, p, k) => p + DICT[k]) : s;
+function trDom(el) {
+  if (cfg.lang !== 'uk' || !el) return;
+  const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let n;
+  while ((n = w.nextNode())) n.nodeValue = tr(n.nodeValue);
+  el.querySelectorAll('[placeholder]').forEach(i => i.placeholder = tr(i.placeholder));
+}
+function statics() {
+  $('#rest').innerHTML = '<span>Отдых</span><b id="rt"></b><button data-a="r15">+15 с</button><button data-a="rstop">Пропустить</button>';
+  $('#dlg').innerHTML = '<div class="box"><p id="dm"></p><input class="q" id="di" style="display:none;margin:0 0 14px"><textarea class="q" id="da" rows="4" style="display:none;margin:0 0 14px"></textarea><div class="row"><button class="b ghost" id="dno" data-a="dno">Отмена</button><button class="b danger" id="dyes" data-a="dyes">Да</button></div></div>';
+  trDom($('#rest')); trDom($('#dlg'));
+}
+function setLang() { LOC = cfg.lang === 'uk' ? 'uk' : 'ru'; document.documentElement.lang = LOC; statics(); render(); }
+// ==i18n-end
+
 async function load() {
   const keys = await store.keys();
   const wk = keys.filter(k => k.startsWith('w_'));
-  const ex = ['draft', 'cfg'].filter(k => keys.includes(k));
+  const ex = ['draft', 'cfg', 'tpl'].filter(k => keys.includes(k));
   const v = await store.get(wk.concat(ex));
   const p = k => { try { return JSON.parse(v[k]); } catch (e) { return null; } };
   W = wk.map(p).filter(Boolean).sort((a, b) => b.id - a.id);
   if (ex.includes('draft')) D = p('draft') || D;
   if (ex.includes('cfg')) cfg = Object.assign(cfg, p('cfg'));
-  applyTheme(); render();
+  if (ex.includes('tpl')) TPL = p('tpl') || [];
+  if (keys.includes('bw')) store.del('bw');
+  applyTheme(); setLang();
 }
 
 function render() {
   const T = (k, n) => `<button data-a="tab" data-t="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`;
-  const dt = new Date().toLocaleDateString('ru', { weekday: 'long', day: 'numeric', month: 'long' });
+  const dt = new Date().toLocaleDateString(LOC, { weekday: 'long', day: 'numeric', month: 'long' });
   let h = `<div class="top"><div><h1>Мой зал</h1><p class="hint dt">${dt}</p></div>
     <button class="gear" data-a="opensettings" aria-label="Настройки"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></button></div>
-    <nav>${T('t', 'Тренировка')}${T('p', 'Прогресс')}${T('h', 'История')}</nav>`;
-  h += tab === 't' ? workoutView() : tab === 'p' ? progressView() : historyView();
+    <nav><i class="pill"></i>${T('t', 'Тренировка')}${T('p', 'Прогресс')}${T('h', 'История')}</nav>`;
+  h += `<div class="pg ${anim > 0 ? 'inR' : anim < 0 ? 'inL' : ''}">${tab === 't' ? workoutView() : tab === 'p' ? progressView() : historyView()}</div>`;
   $('#app').innerHTML = h;
+  trDom($('#app'));
+  movePill(); anim = 0;
 }
 
+// Выезжающая «капсула» под активной вкладкой, как в Telegram
+function movePill() {
+  const el = $('nav .pill'), b = $('nav button.on');
+  if (!el || !b) return;
+  const x = b.offsetLeft, w = b.offsetWidth;
+  if (pill) {
+    el.style.transform = `translateX(${pill.x}px)`; el.style.width = pill.w + 'px';
+    void el.offsetWidth; el.classList.add('go');
+  }
+  el.style.transform = `translateX(${x}px)`; el.style.width = w + 'px';
+  pill = { x, w };
+}
+
+const tplList = () => TPL.length ? `<p class="sec" style="margin-top:4px">Шаблоны</p>` + TPL.map((x, i) =>
+  `<div class="li" data-a="usetpl" data-i="${i}" style="cursor:pointer"><div><b>${esc(x.n)}</b><div class="hint" style="margin:2px 0 0">${x.e.length} упр.</div></div><button class="x" data-a="deltpl" data-i="${i}" aria-label="x">✕</button></div>`).join('') : '';
+const dtLine = () => `<p class="hint">Дата тренировки: ${dstr(D.dt, { weekday: 'short', day: 'numeric', month: 'long' })} <button class="x" data-a="cleardt" aria-label="x">✕</button></p>`;
+const wkStart = ts => { const d = new Date(ts); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d.getTime(); };
+function goalCard() {
+  const per = {}; W.forEach(w => { const k = wkStart(w.id); per[k] = (per[k] || 0) + 1; });
+  const cur = wkStart(Date.now()), n = per[cur] || 0; let streak = n >= cfg.goal ? 1 : 0;
+  const kd = new Date(cur);
+  for (;;) { kd.setDate(kd.getDate() - 7); if ((per[kd.getTime()] || 0) >= cfg.goal) streak++; else break; }
+  const C = 2 * Math.PI * 34, f = Math.min(1, n / cfg.goal);
+  return `<section class="card" style="display:flex;align-items:center;gap:16px"><svg width="84" height="84" viewBox="0 0 84 84">
+    <circle cx="42" cy="42" r="34" fill="none" stroke="var(--bg)" stroke-width="9"/>
+    <circle cx="42" cy="42" r="34" fill="none" stroke="var(--ac)" stroke-width="9" stroke-linecap="round" stroke-dasharray="${C * f} ${C}" transform="rotate(-90 42 42)"/>
+    <text x="42" y="48" text-anchor="middle" font-size="20" font-weight="800" fill="var(--tx)">${n}/${cfg.goal}</text></svg>
+    <div><h3>Эта неделя</h3><p class="hint" style="margin:4px 0 0">Серия недель: ${streak}</p></div></section>`;
+}
 function workoutView() {
   let h = `<button class="b full" data-a="opencat">+ Добавить упражнение</button>`;
-  if (!D.e.length) return h + `<div class="empty"><div class="em">🏋️</div>Тренировка ещё не началась.<br>Выбери упражнение в каталоге: верх или низ, группа, мышца.</div>`;
-  if (D.t0) h += `<p class="hint">Идёт ${Math.max(1, Math.round((Date.now() - D.t0) / 60000))} мин</p>`;
+  if (!D.e.length) return h + (D.dt ? dtLine() : '') + tplList() + `<div class="empty"><div class="em">🏋️</div>Тренировка ещё не началась.<br>Выбери упражнение в каталоге: верх или низ, группа, мышца.</div>`;
+  if (D.dt) h += dtLine();
+  else if (D.t0) h += `<p class="hint">Идёт ${Math.max(1, Math.round((Date.now() - D.t0) / 60000))} мин</p>`;
   D.e.forEach((x, i) => {
     const l = lastTime(x.n);
     const ref = x.s.length ? x.s[x.s.length - 1] : (l ? l[0] : ['', '']);
     const w = x.w !== undefined ? x.w : ref[0], r = x.r !== undefined ? x.r : ref[1];
     h += `<section class="card"><div class="hd"><h2>${esc(x.n)}</h2>
-      <button class="x" data-a="delex" data-i="${i}" aria-label="Удалить упражнение">✕</button></div>`;
+      <button class="x" data-a="delex" data-i="${i}" aria-label="x">✕</button></div>`;
     if (l) h += `<p class="hint">Прошлый раз: ${setsText(l)}</p>`;
     x.s.forEach((s, j) => {
-      h += `<div class="set"><i>${j + 1}</i><b>${fmt(s[0])} кг × ${s[1]}</b>${s[2] ? '<span class="pr">рекорд</span>' : ''}
+      h += `<div class="set"><i>${j + 1}</i><b>${fmt(s[0])} кг × ${s[1]}</b>${s[2] === 1 ? '<span class="pr">рекорд</span>' : s[2] === 2 ? '<span class="pr wu">разминка</span>' : ''}
         <small>1ПМ ≈ ${Math.round(e1(s[0], s[1]))}</small>
-        <button class="x" data-a="delset" data-i="${i}" data-j="${j}" aria-label="Удалить подход">✕</button></div>`;
+        <button class="x" data-a="editset" data-i="${i}" data-j="${j}" aria-label="edit">✎</button><button class="x" data-a="delset" data-i="${i}" data-j="${j}" aria-label="x">✕</button></div>`;
     });
     const stp = (f, v, d) => `<label class="f">${f === 'w' ? 'Вес, кг' : 'Повторы'}<div class="st">
       <button data-a="step" data-f="${f}" data-i="${i}" data-d="-${d}">−</button>
       <input type="number" inputmode="decimal" step="${d}" min="0" data-f="${f}" data-i="${i}" value="${v}">
       <button data-a="step" data-f="${f}" data-i="${i}" data-d="${d}">+</button></div></label>`;
     h += `<div class="in">${stp('w', w, cfg.step)}${stp('r', r, 1)}</div>
-      <button class="b full" style="margin:0" data-a="addset" data-i="${i}">Записать подход</button></section>`;
+      <div class="chips" style="margin:0 0 10px"><button class="chip ${x.wu ? 'on' : ''}" data-a="wu" data-i="${i}">Разминочный</button></div>
+      <button class="b full" style="margin:0 0 10px" data-a="addset" data-i="${i}">Записать подход</button>
+      <input class="q" style="margin:0" placeholder="Заметка" data-f="c" data-i="${i}" value="${esc(x.c || '')}"></section>`;
   });
-  if (D.e.some(x => x.s.length)) h += `<button class="b full ghost" data-a="finish" style="background:var(--card)">Завершить тренировку</button>`;
+  if (D.e.some(x => x.s.length)) h += `<button class="b full" data-a="finish">Завершить тренировку</button>`;
+  h += `<button class="b full ghost" data-a="savetpl" style="background:var(--card)">Сохранить как шаблон</button>`;
   return h;
 }
 
@@ -245,16 +483,23 @@ function progressView() {
   if (!names.length) return `<div class="empty"><div class="em">📈</div>Графики появятся, когда ты завершишь первую тренировку.</div>`;
   if (!names.includes(pe)) pe = names[0];
   const wk = W.filter(w => Date.now() - w.id < 7 * 864e5).length;
-  const prs = W.reduce((a, w) => a + w.e.reduce((b, x) => b + x.s.filter(s => s[2]).length, 0), 0);
+  const prs = W.reduce((a, w) => a + w.e.reduce((b, x) => b + x.s.filter(s => s[2] === 1).length, 0), 0);
   const pts = W.slice().reverse().map(w => {
-    const x = w.e.find(x => x.n === pe);
-    return x ? { id: w.id, v: Math.max(...x.s.map(s => e1(s[0], s[1]))), s: x.s } : null;
+    const x = w.e.find(x => x.n === pe), ss = x ? x.s.filter(s => s[2] !== 2) : [];
+    return ss.length ? { id: w.id, v: Math.max(...ss.map(s => e1(s[0], s[1]))), s: x.s } : null;
   }).filter(Boolean).slice(-20);
-  let h = `<div class="stats"><div><b>${W.length}</b><span>тренировок</span></div><div><b>${wk}</b><span>за 7 дней</span></div>
+  const rec = {};
+  W.forEach(w => w.e.forEach(x => x.s.forEach(s => {
+    if (s[2] === 2) return;
+    const v = e1(s[0], s[1]); if (!rec[x.n] || v > rec[x.n].v) rec[x.n] = { v, s, id: w.id };
+  })));
+  let h = goalCard() + `<div class="stats"><div><b>${W.length}</b><span>тренировок</span></div><div><b>${wk}</b><span>за 7 дней</span></div>
     <div><b>${prs}</b><span>рекордов</span></div></div>
-    <select class="q" data-f="pe">${names.map(n => `<option ${n === pe ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+    <select class="q" data-f="pe">${names.map(n => `<option value="${esc(n)}" ${n === pe ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
     <section class="card"><h3>Расчётный максимум на 1 повтор, кг</h3>${chart(pts)}</section>`;
   pts.slice(-5).reverse().forEach(a => h += `<div class="li" style="cursor:default"><b>${dstr(a.id)}</b><span>${setsText(a.s)}</span></div>`);
+  h += `<section class="card"><h3>Рекорды</h3>` + Object.keys(rec).sort().map(n =>
+    `<div class="opt"><div><b>${esc(n)}</b><div class="hint">${dstr(rec[n].id)}</div></div><b>${fmt(rec[n].s[0])}×${rec[n].s[1]}</b></div>`).join('') + `</section>`;
   return h;
 }
 
@@ -270,15 +515,38 @@ function chart(p) {
     ${tx(l, H - 6, dstr(p[0].id))}${tx(Wd - r, H - 6, dstr(p[p.length - 1].id), 'end')}</svg>`;
 }
 
+function calView() {
+  const y = cm.getFullYear(), m = cm.getMonth(), off = (new Date(y, m, 1).getDay() + 6) % 7, dim = new Date(y, m + 1, 0).getDate();
+  const cnt = {}; W.forEach(w => { const k = dkey(w.id); cnt[k] = (cnt[k] || 0) + 1; });
+  const today = dkey(Date.now());
+  let g = '', month = 0;
+  for (let i = 0; i < 7; i++) g += `<div class="cw">${new Date(2024, 0, 1 + i).toLocaleDateString(LOC, { weekday: 'short' })}</div>`;
+  for (let i = 0; i < off; i++) g += '<div></div>';
+  for (let d = 1; d <= dim; d++) {
+    const k = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    if (cnt[k]) month++;
+    g += `<button class="cd ${cnt[k] ? 'has' : ''} ${k === today ? 'today' : ''} ${k === sel ? 'sel' : ''}" data-a="day" data-k="${k}">${d}</button>`;
+  }
+  return `<section class="card"><div class="hd"><button class="x" data-a="cm" data-d="-1" style="font-size:22px" aria-label="‹">‹</button>
+    <h3 style="text-transform:capitalize">${cm.toLocaleDateString(LOC, { month: 'long', year: 'numeric' })}</h3>
+    <button class="x" data-a="cm" data-d="1" style="font-size:22px" aria-label="›">›</button></div>
+    <div class="cal">${g}</div><p class="hint" style="margin:12px 0 0">Тренировок за месяц: ${month}</p></section>`;
+}
+
 function historyView() {
-  if (!W.length) return `<div class="empty"><div class="em">🗓️</div>Пока нет тренировок. Заверши первую, и она появится здесь.</div>`;
-  return W.map(w => {
-    const prs = w.e.reduce((a, x) => a + x.s.filter(s => s[2]).length, 0);
+  let h = calView();
+  if (sel && sel <= dkey(Date.now())) h += `<button class="b full ghost" data-a="backdate" style="background:var(--card)">Записать тренировку на эту дату</button>`;
+  if (sel) h += `<p class="hint">Нажми на выбранную дату ещё раз, чтобы увидеть все тренировки.</p>`;
+  const list = sel ? W.filter(w => dkey(w.id) === sel) : W;
+  if (!list.length) return h + `<div class="empty"><div class="em">🗓️</div>${sel ? 'В этот день тренировок не было.' : 'Пока нет тренировок. Заверши первую, и она появится здесь.'}</div>`;
+  return h + list.map(w => {
+    const prs = w.e.reduce((a, x) => a + x.s.filter(s => s[2] === 1).length, 0);
     const n = w.e.reduce((a, x) => a + x.s.length, 0);
     return `<section class="card hist"><div class="hd"><h3>${dstr(w.id, { weekday: 'short', day: 'numeric', month: 'long' })}</h3>
-      <button class="x" data-a="delw" data-id="${w.id}" aria-label="Удалить тренировку">✕</button></div>
+      <button class="x" data-a="delw" data-id="${w.id}" aria-label="x">✕</button></div>
       <p class="hint">${w.m ? w.m + ' мин, ' : ''}подходов: ${n}${prs ? ', рекордов: ' + prs : ''}</p>
-      ${w.e.map(x => `<p><b>${esc(x.n)}:</b> ${setsText(x.s)}</p>`).join('')}</section>`;
+      ${w.e.map(x => `<p><b>${esc(x.n)}:</b> ${setsText(x.s)}${x.c ? `<br><i class="hint">${esc(x.c)}</i>` : ''}</p>`).join('')}
+      <div class="row2"><button class="chip" data-a="repeat" data-id="${w.id}">Повторить</button><button class="chip" data-a="share" data-id="${w.id}">Скопировать итог</button></div></section>`;
   }).join('');
 }
 
@@ -287,6 +555,7 @@ function shell() {
   $('#cat').innerHTML = `<div><div class="hd"><button class="x" data-a="cback" style="font-size:17px">‹ Назад</button>
     <button class="b" data-a="cdone">Готово</button></div><h2 id="ct" style="margin-top:8px"></h2>
     <input class="q" id="q" placeholder="Поиск или своё упражнение" autocomplete="off" value="${esc(q)}"><div id="cb"></div></div>`;
+  trDom($('#cat'));
   fillCat();
 }
 const row = n => `<button class="li ${D.e.some(x => sameN(x.n, n)) ? 'on' : ''}" data-a="pick" data-n="${esc(n)}">${esc(n)}<span>${D.e.some(x => sameN(x.n, n)) ? '✓' : '+'}</span></button>`;
@@ -299,9 +568,9 @@ function fillCat() {
   if (t) {
     const all = new Set(W.flatMap(w => w.e.map(x => x.n)));
     Object.values(CAT).forEach(g => Object.values(g).forEach(m => Object.values(m).forEach(s => s.split('|').forEach(n => all.add(n)))));
-    const res = [...all].filter(n => n.toLowerCase().includes(t));
+    const res = [...all].filter(n => n.toLowerCase().includes(t) || tr(n).toLowerCase().includes(t));
     h = res.map(row).join('');
-    if (!res.some(n => sameN(n, q.trim()))) h += `<button class="li" data-a="pick" data-n="${esc(q.trim())}">Добавить своё: «${esc(q.trim())}»<span>+</span></button>`;
+    if (!res.some(n => sameN(n, q.trim()) || sameN(tr(n), q.trim()))) h += `<button class="li" data-a="pick" data-n="${esc(q.trim())}">Добавить своё: «${esc(q.trim())}»<span>+</span></button>`;
   } else if (!cp.length) {
     h = `<div class="tiles big">${Object.keys(CAT).map(k => `<button class="tile" data-a="go" data-k="${k}"><i>${ICO[k] || ""}</i><div><b>${k}</b><span>${keysL(CAT[k])}</span></div></button>`).join('')}</div>`;
   } else if (cp.length === 1) {
@@ -311,6 +580,7 @@ function fillCat() {
     h = Object.keys(g).map(k => `<button class="li" data-a="go" data-k="${k}">${k}<span>${g[k].split('|').length} упр. ›</span></button>`).join('');
   } else h = CAT[cp[0]][cp[1]][cp[2]].split('|').map(row).join('');
   $('#cb').innerHTML = h;
+  trDom($('#cb')); trDom($('#ct'));
 }
 const closeCat = () => { $('#cat').classList.remove('on'); render(); };
 
@@ -330,16 +600,20 @@ function renderSet() {
   const opt = (t, s, c, col) => `<div class="opt ${col ? 'col' : ''}"><div><b>${t}</b>${s ? `<div class="hint">${s}</div>` : ''}</div>${c}</div>`;
   $('#set').innerHTML = `<div><div class="hd"><h1>Настройки</h1><button class="b" data-a="closeset">Готово</button></div>
     <p class="sec">ОФОРМЛЕНИЕ</p><section class="card">
+      ${opt('Язык / Мова', '', chips('lang', ['ru', 'uk'], ['Русский', 'Українська']), 1)}
       ${opt('Тема', 'Авто берёт тему из Telegram', chips('theme', ['auto', 'light', 'dark'], ['Авто', 'Светлая', 'Тёмная']), 1)}</section>
     <p class="sec">ТРЕНИРОВКА</p><section class="card">
       ${opt('Отдых между подходами', 'Секунды', chips('rest', [60, 90, 120, 180]), 1)}
       ${opt('Шаг веса', 'Кнопки − и + меняют вес на это число, кг', chips('step', [1, 2.5, 5]), 1)}
+      ${opt('Цель на неделю', 'Тренировок в неделю', chips('goal', [2, 3, 4, 5, 6]), 1)}
       ${opt('Запускать таймер сам', 'После каждого записанного подхода', sw('auto'))}
       ${opt('Вибрация', 'Отклик на нажатия и конец отдыха', sw('vib'))}</section>
     <p class="sec">ДАННЫЕ</p><section class="card">
-      ${opt('Резервная копия', 'Скопирует все тренировки в буфер обмена', '<button class="b ghost" data-a="copy">Скопировать</button>')}
+      ${opt('Резервная копия', 'Скопирует тренировки и шаблоны', '<button class="b ghost" data-a="copy">Скопировать</button>')}
+      ${opt('Восстановить из копии', 'Вернёт тренировки из резервной копии', '<button class="b ghost" data-a="restore">Вставить</button>')}
       ${opt('Очистить историю', 'Удалит все завершённые тренировки', '<button class="b danger" data-a="clear">Очистить</button>')}</section>
     <p class="hint" style="text-align:center">Данные хранятся в облаке Telegram и привязаны к твоему аккаунту.</p></div>`;
+  trDom($('#set'));
 }
 const tmo = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(false), ms))]);
 async function wipe() {
@@ -370,7 +644,12 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-a]');
   if (!b) return;
   const d = b.dataset, a = d.a, i = +d.i, j = +d.j;
-  if (a === 'tab') { tab = d.t; render(); }
+  if (a === 'tab') {
+    if (d.t === tab) return;
+    const o = ['t', 'p', 'h']; anim = o.indexOf(d.t) > o.indexOf(tab) ? 1 : -1; tab = d.t;
+    try { if (cfg.vib) tg.HapticFeedback.selectionChanged(); } catch (e) {}
+    render();
+  }
   else if (a === 'opencat') { cp = []; q = ''; $('#cat').classList.add('on'); $('#cat').scrollTop = 0; shell(); }
   else if (a === 'cdone') closeCat();
   else if (a === 'cback') {
@@ -393,9 +672,9 @@ document.addEventListener('click', e => {
     const x = D.e[i];
     const w = parseFloat($(`input[data-f="w"][data-i="${i}"]`).value), r = parseInt($(`input[data-f="r"][data-i="${i}"]`).value, 10);
     if (isNaN(w) || w < 0 || isNaN(r) || r < 1) return warn('Введи вес и число повторов.');
-    const hb = best(x.n); let p = hb; x.s.forEach(s => p = Math.max(p, e1(s[0], s[1])));
-    const pr = hb > 0 && e1(w, r) > p + 0.01;
-    x.s.push(pr ? [w, r, 1] : [w, r]);
+    const hb = best(x.n); let p = hb; x.s.forEach(s => { if (s[2] !== 2) p = Math.max(p, e1(s[0], s[1])); });
+    const pr = !x.wu && hb > 0 && e1(w, r) > p + 0.01;
+    x.s.push(x.wu ? [w, r, 2] : pr ? [w, r, 1] : [w, r]);
     delete x.w; delete x.r;
     saveDraft(); hap(); if (cfg.auto) startRest(cfg.rest); render();
     if (pr) { toast('Новый рекорд!'); hap(1); }
@@ -407,22 +686,67 @@ document.addEventListener('click', e => {
   }
   else if (a === 'opensettings') { $('#set').classList.add('on'); $('#set').scrollTop = 0; renderSet(); }
   else if (a === 'closeset') { $('#set').classList.remove('on'); render(); }
-  else if (a === 'cset') { cfg[d.k] = d.k === 'theme' ? d.v : +d.v; saveCfg(); applyTheme(); renderSet(); }
+  else if (a === 'cset') { cfg[d.k] = (d.k === 'theme' || d.k === 'lang') ? d.v : +d.v; saveCfg(); applyTheme(); if (d.k === 'lang') setLang(); renderSet(); }
+  else if (a === 'wu') { D.e[i].wu = !D.e[i].wu; render(); }
+  else if (a === 'editset') { const x = D.e[i], st = x.s[j]; x.w = String(st[0]); x.r = String(st[1]); x.s.splice(j, 1); saveDraft(); render(); }
+  else if (a === 'cleardt') { delete D.dt; saveDraft(); render(); }
+  else if (a === 'backdate') { D.dt = new Date(sel + 'T12:00:00').getTime(); saveDraft(); tab = 't'; anim = -1; render(); }
+  else if (a === 'usetpl') { D = { e: TPL[i].e.map(n => ({ n, s: [] })), t0: Date.now() }; saveDraft(); render(); }
+  else if (a === 'deltpl') ask('Удалить шаблон?', () => { TPL.splice(i, 1); store.set('tpl', JSON.stringify(TPL)); render(); });
+  else if (a === 'savetpl') {
+    if (!D.e.length) return;
+    ask('Название шаблона', nm => {
+      nm = (nm || '').trim(); if (!nm) return;
+      TPL.push({ n: nm, e: D.e.map(x => x.n) });
+      const j = JSON.stringify(TPL);
+      if (TPL.length > 15 || j.length > 3900) { TPL.pop(); return warn('Слишком много шаблонов. Удали ненужные.'); }
+      store.set('tpl', j); toast('Шаблон сохранён');
+    }, 'in');
+  }
+  else if (a === 'repeat') {
+    const w = W.find(x => x.id === +d.id); if (!w) return;
+    const go = () => { D = { e: w.e.map(x => ({ n: x.n, s: [] })), t0: Date.now() }; saveDraft(); tab = 't'; anim = -1; render(); };
+    D.e.length ? ask('Текущая тренировка будет заменена. Продолжить?', go) : go();
+  }
+  else if (a === 'share') {
+    const w = W.find(x => x.id === +d.id); if (!w) return;
+    copyText(dstr(w.id, { weekday: 'long', day: 'numeric', month: 'long' }) + (w.m ? ', ' + w.m + ' ' + tr('мин') : '') + '\n' + w.e.map(x => tr(x.n) + ': ' + setsText(x.s)).join('\n'));
+  }
+  else if (a === 'restore') ask('Вставь скопированные данные', async v => {
+    try {
+      const o = JSON.parse(v); let add = 0;
+      for (const w of (o.тренировки || [])) {
+        if (!w || !w.id || !Array.isArray(w.e) || W.some(x => x.id === w.id)) continue;
+        const j = JSON.stringify(w); if (j.length > 4000) continue;
+        await store.set('w_' + w.id, j); W.push(w); add++;
+      }
+      W.sort((a, b) => b.id - a.id);
+      if (Array.isArray(o.шаблоны) && !TPL.length) { TPL = o.шаблоны; await store.set('tpl', JSON.stringify(TPL)); }
+      if (o.настройки && typeof o.настройки === 'object') { Object.assign(cfg, o.настройки); saveCfg(); applyTheme(); setLang(); renderSet(); }
+      render(); toast('Добавлено тренировок: ' + add);
+    } catch (e) { warn('Не удалось прочитать копию.'); }
+  }, 'ta');
+  else if (a === 'day') { sel = sel === d.k ? '' : d.k; render(); }
+  else if (a === 'cm') { cm.setMonth(cm.getMonth() + +d.d); render(); }
   else if (a === 'ctog') { cfg[d.k] = !cfg[d.k]; saveCfg(); renderSet(); }
-  else if (a === 'copy') copyText(JSON.stringify({ версия: 1, настройки: cfg, тренировки: W }));
+  else if (a === 'copy') copyText(JSON.stringify({ версия: 2, настройки: cfg, тренировки: W, шаблоны: TPL }));
   else if (a === 'clear') ask('Удалить все завершённые тренировки? Это нельзя отменить.', wipe);
   else if (a === 'dno') { dlgCb = null; $('#dlg').classList.remove('on'); }
-  else if (a === 'dyes') { const f = dlgCb; dlgCb = null; $('#dlg').classList.remove('on'); if (f) f(); }
+  else if (a === 'dyes') {
+    const v = $('#di').style.display === 'block' ? $('#di').value : $('#da').style.display === 'block' ? $('#da').value : undefined;
+    const f = dlgCb; dlgCb = null; $('#dlg').classList.remove('on'); if (f) f(v);
+  }
   else if (a === 'r15') { if (rest) rest += 15000; tick(); }
   else if (a === 'rstop') { rest = 0; $('#rest').classList.remove('on'); }
   else if (a === 'finish') {
-    const ex = D.e.filter(x => x.s.length).map(({ n, s }) => ({ n, s }));
+    const ex = D.e.filter(x => x.s.length).map(({ n, s, c }) => c ? { n, s, c } : { n, s });
     if (!ex.length) return;
-    const id = Date.now(), w = { id, m: D.t0 ? Math.max(1, Math.round((id - D.t0) / 60000)) : 0, e: ex };
+    let id = D.dt || Date.now(); while (W.some(x => x.id === id)) id++;
+    const w = { id, m: (D.t0 && !D.dt) ? Math.max(1, Math.round((id - D.t0) / 60000)) : 0, e: ex };
     const json = JSON.stringify(w);
     if (json.length > 4000) return warn('Тренировка слишком большая для сохранения. Сократи число упражнений или подходов.');
     store.set('w_' + id, json); W.unshift(w); D = { e: [] }; store.del('draft');
-    rest = 0; $('#rest').classList.remove('on'); tab = 'h'; render(); toast('Тренировка сохранена'); hap(1);
+    rest = 0; $('#rest').classList.remove('on'); tab = 'h'; anim = 1; render(); toast('Тренировка сохранена'); hap(1);
   }
   else if (a === 'delw') {
     const id = +d.id;
@@ -433,9 +757,9 @@ document.addEventListener('click', e => {
 document.addEventListener('input', e => {
   const t = e.target;
   if (t.id === 'q') { q = t.value; fillCat(); }
-  else if (t.dataset.f === 'w' || t.dataset.f === 'r') D.e[+t.dataset.i][t.dataset.f] = t.value;
+  else if (['w', 'r', 'c'].includes(t.dataset.f)) D.e[+t.dataset.i][t.dataset.f] = t.value;
 });
-document.addEventListener('change', e => { if (e.target.dataset.f === 'pe') { pe = e.target.value; render(); } });
+document.addEventListener('change', e => { if (e.target.dataset.f === 'pe') { pe = e.target.value; render(); } else if (e.target.dataset.f === 'c') saveDraft(); });
 
 load();
 </script>
