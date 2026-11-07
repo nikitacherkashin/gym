@@ -187,13 +187,18 @@ cm.setDate(1);
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = n => String(+n);
+const sc = (k, w, r) => k === 'time' ? r : k === 'wtime' ? w * 1000 + r : e1(w, r);
 const e1 = (w, r) => r === 1 ? w : w * (1 + r / 30); // расчётный разовый максимум (формула Эпли)
-const setsText = s => s.map(a => fmt(a[0]) + '×' + a[1]).join(', ');
+const fmtT = sec => Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+const setsText = (s, t) => s.map(a => t === 'time' ? fmtT(a[1]) : t === 'wtime' ? fmt(a[0]) + '×' + fmtT(a[1]) : fmt(a[0]) + '×' + a[1]).join(', ');
+const setLabel = (s, t) => t === 'time' ? fmtT(s[1]) : fmt(s[0]) + ' кг × ' + (t === 'wtime' ? fmtT(s[1]) : s[1]);
+const TIMED = { 'Планка': 'time', 'Прогулка фермера': 'wtime' };
+const kindOf = n => { if (TIMED[n]) return TIMED[n]; for (const w of W) { const x = w.e.find(x => sameN(x.n, n)); if (x) return x.t; } return undefined; };
 const dkey = id => { const d = new Date(id); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const dstr = (id, o) => new Date(id).toLocaleDateString(LOC, o || { day: 'numeric', month: 'short' });
 const sameN = (a, b) => a.toLowerCase() === b.toLowerCase();
 const lastTime = n => { for (const w of W) { const x = w.e.find(x => sameN(x.n, n)); if (x) return x.s; } return null; };
-const best = n => { let m = 0; W.forEach(w => w.e.forEach(x => { if (sameN(x.n, n)) x.s.forEach(s => { if (s[2] !== 2) m = Math.max(m, e1(s[0], s[1])); }); })); return m; };
+const best = n => { let m = 0; W.forEach(w => w.e.forEach(x => { if (sameN(x.n, n)) x.s.forEach(s => { if (s[2] !== 2) m = Math.max(m, sc(x.t, s[0], s[1])); }); })); return m; };
 let dlgCb = null;
 const ask = (m, ok, mode) => {
   $('#dm').textContent = tr(m); dlgCb = ok;
@@ -206,7 +211,7 @@ const ask = (m, ok, mode) => {
 };
 const warn = m => (tg && tg.showAlert) ? tg.showAlert(tr(m)) : alert(tr(m));
 const hap = t => { if (!cfg.vib) return; try { t ? tg.HapticFeedback.notificationOccurred('success') : tg.HapticFeedback.impactOccurred('light'); } catch (e) {} };
-const saveDraft = () => store.set('draft', JSON.stringify({ t0: D.t0, dt: D.dt, e: D.e.map(({ n, s, c }) => ({ n, s, c })) }));
+const saveDraft = () => store.set('draft', JSON.stringify({ t0: D.t0, dt: D.dt, e: D.e.map(({ n, s, c, t }) => ({ n, s, c, t })) }));
 function toast(m) { const t = $('#toast'); t.textContent = tr(m); t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 2000); }
 
 // Таймер отдыха
@@ -245,7 +250,11 @@ const UA_UI = `Мой зал=Мій зал
 Графики появятся, когда ты завершишь первую тренировку.=Графіки з’являться, коли ти завершиш перше тренування.
 тренировок=тренувань
 за 7 дней=за 7 днів
-Расчётный максимум на 1 повтор, кг=Розрахунковий максимум на 1 повторення, кг
+Максимальный вес, кг=Максимальна вага, кг
+Максимальное время, с=Максимальний час, с
+Время, с=Час, с
+Время=Час
+Вес и время=Вага і час
 Нужно минимум две тренировки с этим упражнением.=Потрібно щонайменше два тренування з цією вправою.
 Пока нет тренировок. Заверши первую, и она появится здесь.=Поки немає тренувань. Заверши перше, і воно з’явиться тут.
 В этот день тренировок не было.=Цього дня тренувань не було.
@@ -458,17 +467,19 @@ function workoutView() {
     const w = x.w !== undefined ? x.w : ref[0], r = x.r !== undefined ? x.r : ref[1];
     h += `<section class="card"><div class="hd"><h2>${esc(x.n)}</h2>
       <button class="x" data-a="delex" data-i="${i}" aria-label="x">✕</button></div>`;
-    if (l) h += `<p class="hint">Прошлый раз: ${setsText(l)}</p>`;
+    if (l) h += `<p class="hint">Прошлый раз: ${setsText(l, x.t)}</p>`;
     x.s.forEach((s, j) => {
-      h += `<div class="set"><i>${j + 1}</i><b>${fmt(s[0])} кг × ${s[1]}</b>${s[2] === 1 ? '<span class="pr">рекорд</span>' : s[2] === 2 ? '<span class="pr wu">разминка</span>' : ''}
-        <small>1ПМ ≈ ${Math.round(e1(s[0], s[1]))}</small>
+      h += `<div class="set"><i>${j + 1}</i><b>${setLabel(s, x.t)}</b>${s[2] === 1 ? '<span class="pr">рекорд</span>' : s[2] === 2 ? '<span class="pr wu">разминка</span>' : ''}
+        
         <button class="x" data-a="editset" data-i="${i}" data-j="${j}" aria-label="edit">✎</button><button class="x" data-a="delset" data-i="${i}" data-j="${j}" aria-label="x">✕</button></div>`;
     });
-    const stp = (f, v, d) => `<label class="f">${f === 'w' ? 'Вес, кг' : 'Повторы'}<div class="st">
+    const tchips = !x.s.length ? `<div class="chips" style="margin:10px 0 0">${[['', 'Повторы'], ['time', 'Время'], ['wtime', 'Вес и время']].map(([k, n]) =>
+      `<button class="chip ${(x.t || '') === k ? 'on' : ''}" data-a="kind" data-i="${i}" data-k="${k}">${n}</button>`).join('')}</div>` : '';
+    const stp = (f, v, d) => `<label class="f">${f === 'w' ? 'Вес, кг' : x.t ? 'Время, с' : 'Повторы'}<div class="st">
       <button data-a="step" data-f="${f}" data-i="${i}" data-d="-${d}">−</button>
       <input type="number" inputmode="decimal" step="${d}" min="0" data-f="${f}" data-i="${i}" value="${v}">
       <button data-a="step" data-f="${f}" data-i="${i}" data-d="${d}">+</button></div></label>`;
-    h += `<div class="in">${stp('w', w, cfg.step)}${stp('r', r, 1)}</div>
+    h += tchips + `<div class="in">${x.t === 'time' ? '' : stp('w', w, cfg.step)}${stp('r', r, x.t ? 5 : 1)}</div>
       <div class="chips" style="margin:0 0 10px"><button class="chip ${x.wu ? 'on' : ''}" data-a="wu" data-i="${i}">Разминочный</button></div>
       <button class="b full" style="margin:0 0 10px" data-a="addset" data-i="${i}">Записать подход</button>
       <input class="q" style="margin:0" placeholder="Заметка" data-f="c" data-i="${i}" value="${esc(x.c || '')}"></section>`;
@@ -486,20 +497,20 @@ function progressView() {
   const prs = W.reduce((a, w) => a + w.e.reduce((b, x) => b + x.s.filter(s => s[2] === 1).length, 0), 0);
   const pts = W.slice().reverse().map(w => {
     const x = w.e.find(x => x.n === pe), ss = x ? x.s.filter(s => s[2] !== 2) : [];
-    return ss.length ? { id: w.id, v: Math.max(...ss.map(s => e1(s[0], s[1]))), s: x.s } : null;
+    return ss.length ? { id: w.id, v: Math.max(...ss.map(s => x.t === 'time' ? s[1] : s[0])), s: x.s } : null;
   }).filter(Boolean).slice(-20);
   const rec = {};
   W.forEach(w => w.e.forEach(x => x.s.forEach(s => {
     if (s[2] === 2) return;
-    const v = e1(s[0], s[1]); if (!rec[x.n] || v > rec[x.n].v) rec[x.n] = { v, s, id: w.id };
+    const v = sc(x.t, s[0], s[1]); if (!rec[x.n] || v > rec[x.n].v) rec[x.n] = { v, s, id: w.id, t: x.t };
   })));
   let h = goalCard() + `<div class="stats"><div><b>${W.length}</b><span>тренировок</span></div><div><b>${wk}</b><span>за 7 дней</span></div>
     <div><b>${prs}</b><span>рекордов</span></div></div>
     <select class="q" data-f="pe">${names.map(n => `<option value="${esc(n)}" ${n === pe ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
-    <section class="card"><h3>Расчётный максимум на 1 повтор, кг</h3>${chart(pts)}</section>`;
-  pts.slice(-5).reverse().forEach(a => h += `<div class="li" style="cursor:default"><b>${dstr(a.id)}</b><span>${setsText(a.s)}</span></div>`);
+    <section class="card"><h3>${kindOf(pe) === 'time' ? 'Максимальное время, с' : 'Максимальный вес, кг'}</h3>${chart(pts)}</section>`;
+  pts.slice(-5).reverse().forEach(a => h += `<div class="li" style="cursor:default"><b>${dstr(a.id)}</b><span>${setsText(a.s, kindOf(pe))}</span></div>`);
   h += `<section class="card"><h3>Рекорды</h3>` + Object.keys(rec).sort().map(n =>
-    `<div class="opt"><div><b>${esc(n)}</b><div class="hint">${dstr(rec[n].id)}</div></div><b>${fmt(rec[n].s[0])}×${rec[n].s[1]}</b></div>`).join('') + `</section>`;
+    `<div class="opt"><div><b>${esc(n)}</b><div class="hint">${dstr(rec[n].id)}</div></div><b>${setsText([rec[n].s], rec[n].t)}</b></div>`).join('') + `</section>`;
   return h;
 }
 
@@ -545,7 +556,7 @@ function historyView() {
     return `<section class="card hist"><div class="hd"><h3>${dstr(w.id, { weekday: 'short', day: 'numeric', month: 'long' })}</h3>
       <button class="x" data-a="delw" data-id="${w.id}" aria-label="x">✕</button></div>
       <p class="hint">${w.m ? w.m + ' мин, ' : ''}подходов: ${n}${prs ? ', рекордов: ' + prs : ''}</p>
-      ${w.e.map(x => `<p><b>${esc(x.n)}:</b> ${setsText(x.s)}${x.c ? `<br><i class="hint">${esc(x.c)}</i>` : ''}</p>`).join('')}
+      ${w.e.map(x => `<p><b>${esc(x.n)}:</b> ${setsText(x.s, x.t)}${x.c ? `<br><i class="hint">${esc(x.c)}</i>` : ''}</p>`).join('')}
       <div class="row2"><button class="chip" data-a="repeat" data-id="${w.id}">Повторить</button><button class="chip" data-a="share" data-id="${w.id}">Скопировать итог</button></div></section>`;
   }).join('');
 }
@@ -659,7 +670,7 @@ document.addEventListener('click', e => {
   else if (a === 'go') { cp.push(d.k); fillCat(); $('#cat').scrollTop = 0; }
   else if (a === 'pick') {
     if (!d.n) return;
-    if (!D.e.some(x => sameN(x.n, d.n))) { D.e.push({ n: d.n, s: [] }); if (!D.t0) D.t0 = Date.now(); saveDraft(); hap(); }
+    if (!D.e.some(x => sameN(x.n, d.n))) { D.e.unshift({ n: d.n, s: [], t: kindOf(d.n) }); window.scrollTo(0, 0); if (!D.t0) D.t0 = Date.now(); saveDraft(); hap(); }
     fillCat();
   }
   else if (a === 'step') {
@@ -670,10 +681,10 @@ document.addEventListener('click', e => {
   }
   else if (a === 'addset') {
     const x = D.e[i];
-    const w = parseFloat($(`input[data-f="w"][data-i="${i}"]`).value), r = parseInt($(`input[data-f="r"][data-i="${i}"]`).value, 10);
+    const wi = $(`input[data-f="w"][data-i="${i}"]`), w = wi ? parseFloat(wi.value) : 0, r = parseInt($(`input[data-f="r"][data-i="${i}"]`).value, 10);
     if (isNaN(w) || w < 0 || isNaN(r) || r < 1) return warn('Введи вес и число повторов.');
-    const hb = best(x.n); let p = hb; x.s.forEach(s => { if (s[2] !== 2) p = Math.max(p, e1(s[0], s[1])); });
-    const pr = !x.wu && hb > 0 && e1(w, r) > p + 0.01;
+    const hb = best(x.n); let p = hb; x.s.forEach(s => { if (s[2] !== 2) p = Math.max(p, sc(x.t, s[0], s[1])); });
+    const pr = !x.wu && hb > 0 && sc(x.t, w, r) > p + 0.01;
     x.s.push(x.wu ? [w, r, 2] : pr ? [w, r, 1] : [w, r]);
     delete x.w; delete x.r;
     saveDraft(); hap(); if (cfg.auto) startRest(cfg.rest); render();
@@ -687,11 +698,12 @@ document.addEventListener('click', e => {
   else if (a === 'opensettings') { $('#set').classList.add('on'); $('#set').scrollTop = 0; renderSet(); }
   else if (a === 'closeset') { $('#set').classList.remove('on'); render(); }
   else if (a === 'cset') { cfg[d.k] = (d.k === 'theme' || d.k === 'lang') ? d.v : +d.v; saveCfg(); applyTheme(); if (d.k === 'lang') setLang(); renderSet(); }
+  else if (a === 'kind') { const x = D.e[i]; x.t = d.k || undefined; delete x.w; delete x.r; saveDraft(); render(); }
   else if (a === 'wu') { D.e[i].wu = !D.e[i].wu; render(); }
   else if (a === 'editset') { const x = D.e[i], st = x.s[j]; x.w = String(st[0]); x.r = String(st[1]); x.s.splice(j, 1); saveDraft(); render(); }
   else if (a === 'cleardt') { delete D.dt; saveDraft(); render(); }
   else if (a === 'backdate') { D.dt = new Date(sel + 'T12:00:00').getTime(); saveDraft(); tab = 't'; anim = -1; render(); }
-  else if (a === 'usetpl') { D = { e: TPL[i].e.map(n => ({ n, s: [] })), t0: Date.now() }; saveDraft(); render(); }
+  else if (a === 'usetpl') { D = { e: TPL[i].e.map(n => ({ n, s: [], t: kindOf(n) })), t0: Date.now() }; saveDraft(); render(); }
   else if (a === 'deltpl') ask('Удалить шаблон?', () => { TPL.splice(i, 1); store.set('tpl', JSON.stringify(TPL)); render(); });
   else if (a === 'savetpl') {
     if (!D.e.length) return;
@@ -705,12 +717,12 @@ document.addEventListener('click', e => {
   }
   else if (a === 'repeat') {
     const w = W.find(x => x.id === +d.id); if (!w) return;
-    const go = () => { D = { e: w.e.map(x => ({ n: x.n, s: [] })), t0: Date.now() }; saveDraft(); tab = 't'; anim = -1; render(); };
+    const go = () => { D = { e: w.e.map(x => ({ n: x.n, s: [], t: x.t })), t0: Date.now() }; saveDraft(); tab = 't'; anim = -1; render(); };
     D.e.length ? ask('Текущая тренировка будет заменена. Продолжить?', go) : go();
   }
   else if (a === 'share') {
     const w = W.find(x => x.id === +d.id); if (!w) return;
-    copyText(dstr(w.id, { weekday: 'long', day: 'numeric', month: 'long' }) + (w.m ? ', ' + w.m + ' ' + tr('мин') : '') + '\n' + w.e.map(x => tr(x.n) + ': ' + setsText(x.s)).join('\n'));
+    copyText(dstr(w.id, { weekday: 'long', day: 'numeric', month: 'long' }) + (w.m ? ', ' + w.m + ' ' + tr('мин') : '') + '\n' + w.e.map(x => tr(x.n) + ': ' + setsText(x.s, x.t)).join('\n'));
   }
   else if (a === 'restore') ask('Вставь скопированные данные', async v => {
     try {
@@ -739,7 +751,7 @@ document.addEventListener('click', e => {
   else if (a === 'r15') { if (rest) rest += 15000; tick(); }
   else if (a === 'rstop') { rest = 0; $('#rest').classList.remove('on'); }
   else if (a === 'finish') {
-    const ex = D.e.filter(x => x.s.length).map(({ n, s, c }) => c ? { n, s, c } : { n, s });
+    const ex = D.e.filter(x => x.s.length).map(({ n, s, c, t }) => { const o = { n, s }; if (c) o.c = c; if (t) o.t = t; return o; });
     if (!ex.length) return;
     let id = D.dt || Date.now(); while (W.some(x => x.id === id)) id++;
     const w = { id, m: (D.t0 && !D.dt) ? Math.max(1, Math.round((id - D.t0) / 60000)) : 0, e: ex };
