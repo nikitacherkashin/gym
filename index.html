@@ -79,10 +79,13 @@ select.q{margin-top:0}
 .opt.col{flex-direction:column;align-items:flex-start}
 .opt .hint{margin:2px 0 0}
 .sec{font-size:13px;color:var(--hint);margin:18px 4px 8px;font-weight:600}
-.sw{width:52px;height:32px;border-radius:16px;border:0;background:var(--bg);position:relative;flex:none;box-shadow:inset 0 0 0 1px var(--line)}
-.sw::after{content:'';position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:50%;background:var(--hint);transition:left .18s}
-.sw.on{background:var(--ac)}
+.sw{width:52px;height:32px;border-radius:16px;border:0;background:var(--bg);position:relative;flex:none;box-shadow:inset 0 0 0 1px var(--line);transition:background .25s,box-shadow .25s}
+.sw::after{content:'';position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:50%;background:var(--hint);box-shadow:0 2px 4px rgba(0,0,0,.25);transition:left .3s cubic-bezier(.3,1.5,.5,1),width .18s,background .25s}
+.sw:active::after{width:30px}
+.sw.on{background:var(--ac);box-shadow:none}
 .sw.on::after{left:24px;background:#fff}
+.sw.on:active::after{left:18px}
+@media (prefers-reduced-motion:reduce){.sw,.sw::after{transition:none}}
 #rest{position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));max-width:528px;margin:0 auto;background:var(--tx);color:var(--bg);border-radius:20px;padding:10px 12px 10px 18px;display:none;align-items:center;gap:8px;z-index:6;box-shadow:0 14px 30px -10px rgba(0,0,0,.5)}
 #rest.on{display:flex}
 #rest b{font-size:26px;flex:1}
@@ -100,6 +103,7 @@ select.q{margin-top:0}
 .cd.has{background:var(--ac2);color:var(--ac);font-weight:800}
 .cd.today{border-color:var(--ac)}
 .cd.sel{background:var(--ac);color:var(--acx)}
+.chip.sm{padding:4px 11px;font-size:12px;margin:6px 4px 0 0}
 .row2{display:flex;gap:8px;margin-top:10px;align-items:center}
 .pr.wu{background:var(--bg);color:var(--hint);box-shadow:inset 0 0 0 1px var(--line)}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
@@ -160,16 +164,16 @@ const CAT = {
     'Руки': {
       'Бицепс': 'Подъём штанги на бицепс|Подъём гантелей с супинацией|Молотки|Сгибания на скамье Скотта|Сгибание рук в кроссовере',
       'Трицепс': 'Французский жим|Разгибания на верхнем блоке|Жим узким хватом|Разгибание гантели из-за головы|Отжимания на брусьях узко',
-      'Предплечья': 'Сгибание кистей со штангой|Разгибание кистей со штангой|Прогулка фермера'
+      'Предплечья': 'Сгибание кистей со штангой|Разгибание кистей со штангой|Прогулка фермера|Вис на турнике'
     },
     'Корпус': {
       'Пресс': 'Скручивания|Подъём ног в висе|Планка|Скручивания на блоке',
-      'Косые мышцы': 'Боковые скручивания|Русские скручивания|Наклоны с гантелью в сторону'
+      'Косые мышцы': 'Боковые скручивания|Русские скручивания|Наклоны с гантелью в сторону|Боковая планка'
     }
   },
   'Низ': {
     'Ноги': {
-      'Квадрицепс': 'Приседания со штангой|Жим ногами|Разгибание ног в тренажёре|Выпады|Болгарские приседания|Гакк-приседания',
+      'Квадрицепс': 'Приседания со штангой|Жим ногами|Разгибание ног в тренажёре|Выпады|Болгарские приседания|Гакк-приседания|Стульчик у стены',
       'Бицепс бедра': 'Румынская тяга|Сгибание ног лёжа|Сгибание ног сидя|Тяга на прямых ногах',
       'Приводящие': 'Сведение ног в тренажёре|Приседания сумо'
     },
@@ -178,7 +182,7 @@ const CAT = {
   }
 };
 
-let W = [], D = { e: [] }, tab = 't', cp = [], q = '', pe = '', rest = 0, cfg = { rest: 90, theme: 'auto', step: 2.5, auto: true, vib: true, goal: 3,
+let W = [], D = { e: [] }, tab = 't', cp = [], q = '', pe = '', rest = 0, cfg = { rest: 90, theme: 'auto', step: 2.5, auto: true, vib: true, goal: 3, tunit: 's',
   lang: (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.language_code === 'uk') ? 'uk' : 'ru' };
 
 let TPL = [];
@@ -189,11 +193,13 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const fmt = n => String(+n);
 const sc = (k, w, r) => k === 'time' ? r : k === 'wtime' ? w * 1000 + r : e1(w, r);
 const e1 = (w, r) => r === 1 ? w : w * (1 + r / 30); // расчётный разовый максимум (формула Эпли)
+const tu = sec => cfg.tunit === 'm' ? Math.round(sec / 60 * 100) / 100 : sec;
 const fmtT = sec => Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
 const setsText = (s, t) => s.map(a => t === 'time' ? fmtT(a[1]) : t === 'wtime' ? fmt(a[0]) + '×' + fmtT(a[1]) : fmt(a[0]) + '×' + a[1]).join(', ');
 const setLabel = (s, t) => t === 'time' ? fmtT(s[1]) : fmt(s[0]) + ' кг × ' + (t === 'wtime' ? fmtT(s[1]) : s[1]);
-const TIMED = { 'Планка': 'time', 'Прогулка фермера': 'wtime' };
-const kindOf = n => { if (TIMED[n]) return TIMED[n]; for (const w of W) { const x = w.e.find(x => sameN(x.n, n)); if (x) return x.t; } return undefined; };
+const TIMED = { 'Планка': 'time', 'Боковая планка': 'time', 'Прогулка фермера': 'wtime', 'Вис на турнике': 'time', 'Стульчик у стены': 'time' };
+const TIMED_RE = /планк|удержан|утриман|вис на|стульчик|стільчик|стойк|стійк|plank/i;
+const kindOf = n => { if (TIMED[n]) return TIMED[n]; if (TIMED_RE.test(n)) return 'time'; for (const w of W) { const x = w.e.find(x => sameN(x.n, n)); if (x) return x.t; } return undefined; };
 const dkey = id => { const d = new Date(id); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const dstr = (id, o) => new Date(id).toLocaleDateString(LOC, o || { day: 'numeric', month: 'short' });
 const sameN = (a, b) => a.toLowerCase() === b.toLowerCase();
@@ -269,8 +275,8 @@ const UA_UI = `Мой зал=Мій зал
 Секунды=Секунди
 Шаг веса=Крок ваги
 Кнопки − и + меняют вес на это число, кг=Кнопки − та + змінюють вагу на це число, кг
-Запускать таймер сам=Запускати таймер сам
-После каждого записанного подхода=Після кожного записаного підходу
+Таймер отдыха=Таймер відпочинку
+Запускается после каждого записанного подхода=Запускається після кожного записаного підходу
 Вибрация=Вібрація
 Отклик на нажатия и конец отдыха=Відгук на натискання та кінець відпочинку
 ДАННЫЕ=ДАНІ
@@ -364,10 +370,10 @@ const UA_EX = `Жим штанги на похилій лаві|Жим гант�
 Розводка гантелей у нахилі|Зворотні розведення в тренажері|Тяга до обличчя
 Підйом штанги на біцепс|Підйом гантелей із супінацією|Молотки|Згинання на лаві Скотта|Згинання рук у кросовері
 Французький жим|Розгинання на верхньому блоці|Жим вузьким хватом|Розгинання гантелі з-за голови|Віджимання на брусах вузько
-Згинання кистей зі штангою|Розгинання кистей зі штангою|Прогулянка фермера
+Згинання кистей зі штангою|Розгинання кистей зі штангою|Прогулянка фермера|Вис на турніку
 Скручування|Підйом ніг у висі|Планка|Скручування на блоці
-Бокові скручування|Російські скручування|Нахили з гантелею вбік
-Присідання зі штангою|Жим ногами|Розгинання ніг у тренажері|Випади|Болгарські присідання|Гакк-присідання
+Бокові скручування|Російські скручування|Нахили з гантелею вбік|Бокова планка
+Присідання зі штангою|Жим ногами|Розгинання ніг у тренажері|Випади|Болгарські присідання|Гакк-присідання|Стільчик біля стіни
 Румунська тяга|Згинання ніг лежачи|Згинання ніг сидячи|Тяга на прямих ногах
 Зведення ніг у тренажері|Присідання сумо
 Сідничний місток|Хіп-траст|Відведення ноги в кросовері|Випади назад
@@ -464,7 +470,7 @@ function workoutView() {
   D.e.forEach((x, i) => {
     const l = lastTime(x.n);
     const ref = x.s.length ? x.s[x.s.length - 1] : (l ? l[0] : ['', '']);
-    const w = x.w !== undefined ? x.w : ref[0], r = x.r !== undefined ? x.r : ref[1];
+    const w = x.w !== undefined ? x.w : ref[0], r = x.r !== undefined ? x.r : (x.t && ref[1] !== '' ? tu(ref[1]) : ref[1]);
     h += `<section class="card"><div class="hd"><h2>${esc(x.n)}</h2>
       <button class="x" data-a="delex" data-i="${i}" aria-label="x">✕</button></div>`;
     if (l) h += `<p class="hint">Прошлый раз: ${setsText(l, x.t)}</p>`;
@@ -473,13 +479,12 @@ function workoutView() {
         
         <button class="x" data-a="editset" data-i="${i}" data-j="${j}" aria-label="edit">✎</button><button class="x" data-a="delset" data-i="${i}" data-j="${j}" aria-label="x">✕</button></div>`;
     });
-    const tchips = !x.s.length ? `<div class="chips" style="margin:10px 0 0">${[['', 'Повторы'], ['time', 'Время'], ['wtime', 'Вес и время']].map(([k, n]) =>
-      `<button class="chip ${(x.t || '') === k ? 'on' : ''}" data-a="kind" data-i="${i}" data-k="${k}">${n}</button>`).join('')}</div>` : '';
-    const stp = (f, v, d) => `<label class="f">${f === 'w' ? 'Вес, кг' : x.t ? 'Время, с' : 'Повторы'}<div class="st">
+    const tl = `<span>Время<br><button class="chip sm ${cfg.tunit === 'm' ? '' : 'on'}" data-a="tunit" data-v="s">сек</button><button class="chip sm ${cfg.tunit === 'm' ? 'on' : ''}" data-a="tunit" data-v="m">мин</button></span>`;
+    const stp = (f, v, d) => `<label class="f">${f === 'w' ? 'Вес, кг' : x.t ? tl : 'Повторы'}<div class="st">
       <button data-a="step" data-f="${f}" data-i="${i}" data-d="-${d}">−</button>
       <input type="number" inputmode="decimal" step="${d}" min="0" data-f="${f}" data-i="${i}" value="${v}">
       <button data-a="step" data-f="${f}" data-i="${i}" data-d="${d}">+</button></div></label>`;
-    h += tchips + `<div class="in">${x.t === 'time' ? '' : stp('w', w, cfg.step)}${stp('r', r, x.t ? 5 : 1)}</div>
+    h += `<div class="in">${x.t === 'time' ? '' : stp('w', w, cfg.step)}${stp('r', r, x.t ? (cfg.tunit === 'm' ? 0.5 : 5) : 1)}</div>
       <div class="chips" style="margin:0 0 10px"><button class="chip ${x.wu ? 'on' : ''}" data-a="wu" data-i="${i}">Разминочный</button></div>
       <button class="b full" style="margin:0 0 10px" data-a="addset" data-i="${i}">Записать подход</button>
       <input class="q" style="margin:0" placeholder="Заметка" data-f="c" data-i="${i}" value="${esc(x.c || '')}"></section>`;
@@ -614,10 +619,10 @@ function renderSet() {
       ${opt('Язык / Мова', '', chips('lang', ['ru', 'uk'], ['Русский', 'Українська']), 1)}
       ${opt('Тема', 'Авто берёт тему из Telegram', chips('theme', ['auto', 'light', 'dark'], ['Авто', 'Светлая', 'Тёмная']), 1)}</section>
     <p class="sec">ТРЕНИРОВКА</p><section class="card">
+      ${opt('Таймер отдыха', 'Запускается после каждого записанного подхода', sw('auto'))}
       ${opt('Отдых между подходами', 'Секунды', chips('rest', [60, 90, 120, 180]), 1)}
       ${opt('Шаг веса', 'Кнопки − и + меняют вес на это число, кг', chips('step', [1, 2.5, 5]), 1)}
       ${opt('Цель на неделю', 'Тренировок в неделю', chips('goal', [2, 3, 4, 5, 6]), 1)}
-      ${opt('Запускать таймер сам', 'После каждого записанного подхода', sw('auto'))}
       ${opt('Вибрация', 'Отклик на нажатия и конец отдыха', sw('vib'))}</section>
     <p class="sec">ДАННЫЕ</p><section class="card">
       ${opt('Резервная копия', 'Скопирует тренировки и шаблоны', '<button class="b ghost" data-a="copy">Скопировать</button>')}
@@ -670,18 +675,25 @@ document.addEventListener('click', e => {
   else if (a === 'go') { cp.push(d.k); fillCat(); $('#cat').scrollTop = 0; }
   else if (a === 'pick') {
     if (!d.n) return;
-    if (!D.e.some(x => sameN(x.n, d.n))) { D.e.unshift({ n: d.n, s: [], t: kindOf(d.n) }); window.scrollTo(0, 0); if (!D.t0) D.t0 = Date.now(); saveDraft(); hap(); }
+    const k = D.e.findIndex(x => sameN(x.n, d.n));
+    if (k < 0) { D.e.unshift({ n: d.n, s: [], t: kindOf(d.n) }); window.scrollTo(0, 0); if (!D.t0) D.t0 = Date.now(); saveDraft(); hap(); }
+    else {
+      const rm = () => { D.e.splice(k, 1); if (!D.e.length) delete D.t0; saveDraft(); hap(); fillCat(); };
+      if (D.e[k].s.length) return ask('Удалить упражнение вместе с подходами?', rm);
+      return rm();
+    }
     fillCat();
   }
   else if (a === 'step') {
     const inp = $(`input[data-f="${d.f}"][data-i="${i}"]`);
     let v = (parseFloat(inp.value) || 0) + parseFloat(d.d);
-    v = Math.round(Math.max(d.f === 'w' ? 0 : 1, v) * 100) / 100;
+    v = Math.round(Math.max(d.f === 'w' ? 0 : (D.e[i].t && cfg.tunit === 'm') ? 0.5 : 1, v) * 100) / 100;
     inp.value = v; D.e[i][d.f] = String(v);
   }
   else if (a === 'addset') {
     const x = D.e[i];
-    const wi = $(`input[data-f="w"][data-i="${i}"]`), w = wi ? parseFloat(wi.value) : 0, r = parseInt($(`input[data-f="r"][data-i="${i}"]`).value, 10);
+    const wi = $(`input[data-f="w"][data-i="${i}"]`), ri = $(`input[data-f="r"][data-i="${i}"]`), w = wi ? parseFloat(wi.value) : 0;
+    const r = x.t ? Math.round(parseFloat(ri.value) * (cfg.tunit === 'm' ? 60 : 1)) : parseInt(ri.value, 10);
     if (isNaN(w) || w < 0 || isNaN(r) || r < 1) return warn('Введи вес и число повторов.');
     const hb = best(x.n); let p = hb; x.s.forEach(s => { if (s[2] !== 2) p = Math.max(p, sc(x.t, s[0], s[1])); });
     const pr = !x.wu && hb > 0 && sc(x.t, w, r) > p + 0.01;
@@ -698,7 +710,12 @@ document.addEventListener('click', e => {
   else if (a === 'opensettings') { $('#set').classList.add('on'); $('#set').scrollTop = 0; renderSet(); }
   else if (a === 'closeset') { $('#set').classList.remove('on'); render(); }
   else if (a === 'cset') { cfg[d.k] = (d.k === 'theme' || d.k === 'lang') ? d.v : +d.v; saveCfg(); applyTheme(); if (d.k === 'lang') setLang(); renderSet(); }
-  else if (a === 'kind') { const x = D.e[i]; x.t = d.k || undefined; delete x.w; delete x.r; saveDraft(); render(); }
+  else if (a === 'tunit') {
+    if (cfg.tunit === d.v) return;
+    const k = d.v === 'm' ? 1 / 60 : 60;
+    D.e.forEach(x => { if (x.t && x.r !== undefined && x.r !== '') x.r = String(Math.round(parseFloat(x.r) * k * 100) / 100); });
+    cfg.tunit = d.v; saveCfg(); render();
+  }
   else if (a === 'wu') { D.e[i].wu = !D.e[i].wu; render(); }
   else if (a === 'editset') { const x = D.e[i], st = x.s[j]; x.w = String(st[0]); x.r = String(st[1]); x.s.splice(j, 1); saveDraft(); render(); }
   else if (a === 'cleardt') { delete D.dt; saveDraft(); render(); }
@@ -740,7 +757,7 @@ document.addEventListener('click', e => {
   }, 'ta');
   else if (a === 'day') { sel = sel === d.k ? '' : d.k; render(); }
   else if (a === 'cm') { cm.setMonth(cm.getMonth() + +d.d); render(); }
-  else if (a === 'ctog') { cfg[d.k] = !cfg[d.k]; saveCfg(); renderSet(); }
+  else if (a === 'ctog') { cfg[d.k] = !cfg[d.k]; if (d.k === 'auto' && !cfg.auto) { rest = 0; $('#rest').classList.remove('on'); } b.classList.toggle('on', cfg[d.k]); saveCfg(); }
   else if (a === 'copy') copyText(JSON.stringify({ версия: 2, настройки: cfg, тренировки: W, шаблоны: TPL }));
   else if (a === 'clear') ask('Удалить все завершённые тренировки? Это нельзя отменить.', wipe);
   else if (a === 'dno') { dlgCb = null; $('#dlg').classList.remove('on'); }
@@ -757,7 +774,7 @@ document.addEventListener('click', e => {
     const w = { id, m: (D.t0 && !D.dt) ? Math.max(1, Math.round((id - D.t0) / 60000)) : 0, e: ex };
     const json = JSON.stringify(w);
     if (json.length > 4000) return warn('Тренировка слишком большая для сохранения. Сократи число упражнений или подходов.');
-    store.set('w_' + id, json); W.unshift(w); D = { e: [] }; store.del('draft');
+    store.set('w_' + id, json); W.push(w); W.sort((a, b) => b.id - a.id); if (D.dt) { cm = new Date(id); cm.setDate(1); } D = { e: [] }; store.del('draft');
     rest = 0; $('#rest').classList.remove('on'); tab = 'h'; anim = 1; render(); toast('Тренировка сохранена'); hap(1);
   }
   else if (a === 'delw') {
